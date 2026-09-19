@@ -1,0 +1,4 @@
+popupwrapper set
+config load "MicroDuck_F103_FreeRTOS.ioc"
+project generate ./
+exit

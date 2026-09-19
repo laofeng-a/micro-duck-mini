@@ -1,0 +1,12 @@
+# CubeIDE workspace and local cache
+.cubeide-build-workspace/
+.metadata/
+
+# Generated build output
+**/Debug/
+**/Release/
+**/*.elf
+**/*.bin
+**/*.hex
+**/*.map
+**/*.launch

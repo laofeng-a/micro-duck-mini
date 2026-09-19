@@ -1,0 +1,24 @@
+Otto DIY V9 基础版：代打清单
+
+本文件夹仅包含本次 F103ZET6 + 4 个 SG90 学习底盘需要的原始结构件；
+不要代打 Arduino、超声波、电池盒、开关按钮或 OttoDIY+ 版本的文件。
+
+请上传以下 4 个 STL，并按数量打印：
+1. 01_头部_OttoDIY_head_V9.stl       × 1
+2. 02_身体_OttoDIY_body_V9.stl       × 1
+3. 03_腿_OttoDIY_Leg_V9.stl          × 2
+4. 04_脚_OttoDIY_foot_V9.stl         × 2
+
+给代打商家的要求（可直接复制）：
+请按原始尺寸（100%，不要缩放）打印这四个 Otto DIY V9 STL。
+材料：PLA；工艺：FDM；层高：0.20 mm；填充：20%。
+默认不加支撑、不加 raft；如某个零件确实需要支撑，请先联系我确认。
+舵机安装位按 SG90 9g、180°、塑料齿舵机适配；请不要自行修改、镜像、切片拆分或补孔。
+请先报总价，并确认头×1、身体×1、腿×2、脚×2 的数量。
+
+来源与许可
+- 来源：Open-Hardware-Leaders/OttoDIY，3Dprint 目录，master 分支。
+- 原始结构件：OttoDIY_head_V9、OttoDIY_body_V9、OttoDIY_Leg_V9、OttoDIY_foot_V9。
+- 源码仓库：https://github.com/Open-Hardware-Leaders/OttoDIY/tree/master/3Dprint
+- 项目说明建议：PLA、FDM、0.20 mm 层高、至少 20% 填充；原版零件合计约 115 g。
+- 机械与 3D 打印件采用 CERN OHL v2.0；如公开发布修改版，保留来源与相同开源义务。
