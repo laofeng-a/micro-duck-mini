@@ -22,11 +22,10 @@
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
-#include "servo_task.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "servo_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +45,13 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+static osThreadId_t servoTaskHandle;
+
+static const osThreadAttr_t servoTask_attributes = {
+    .name = "servoTask",
+    .stack_size = 128 * 4,
+    .priority = osPriorityNormal,
+};
 
 /* USER CODE END Variables */
 /* Definitions for heartbeatTask */
@@ -90,9 +96,7 @@ void vApplicationStackOverflowHook(xTaskHandle xTask, signed char *pcTaskName)
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-	if (ServoTask_Init() != osOK) {
-	    Error_Handler();
-	}
+
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -116,7 +120,11 @@ void MX_FREERTOS_Init(void) {
   heartbeatTaskHandle = osThreadNew(StartHeartbeatTask, NULL, &heartbeatTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  servoTaskHandle = osThreadNew(ServoTask_Entry, NULL, &servoTask_attributes);
+
+  if (servoTaskHandle == NULL) {
+      Error_Handler();
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

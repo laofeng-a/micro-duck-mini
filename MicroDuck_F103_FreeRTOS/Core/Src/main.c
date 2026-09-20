@@ -25,6 +25,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "servo_pwm.h"
+#include "servo_task.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -91,7 +93,11 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  if (ServoPwm_Start() != HAL_OK) {
+        Error_Handler();
+    }
 
+  ServoTask_SetTargetPulseUs(1600U);
   /* USER CODE END 2 */
 
   /* Init scheduler */
