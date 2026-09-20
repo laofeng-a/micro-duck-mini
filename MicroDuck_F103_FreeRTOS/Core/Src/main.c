@@ -99,10 +99,10 @@ int main(void)
 
   ServoPose_t initial_pose = {
       .pulse_us = {
-          1600U,    /* CH1 */
-          1400U,    /* CH2 */
-          1550U,    /* CH3 */
-          1450U     /* CH4 */
+          1700U,    /* CH1 */
+          1500U,    /* CH2 */
+          1500U,    /* CH3 */
+          1500U     /* CH4 */
       }
   };
 

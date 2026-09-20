@@ -86,7 +86,7 @@ void ServoTask_Entry(void *argument)
     };
 
     ServoPose_t target_pose;
-    uint32_t saved_primask;
+    uint32_t saved_primask;				/*一个寄存器，最后一位表示禁止中断*/
     uint32_t next_wake_tick;
     uint8_t i;
 

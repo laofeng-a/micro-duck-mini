@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include "stm32f1xx_hal.h"
 
-typedef enum {
+typedef enum {				/*表示哪一路舵机*/
     SERVO_PWM_CH1 = 0,
     SERVO_PWM_CH2,
     SERVO_PWM_CH3,

@@ -9,12 +9,7 @@
 #define INC_SERVO_TASK_H_
 
 #include <stdint.h>
-
-#define SERVO_POSE_CHANNEL_COUNT    4U
-
-typedef struct {
-    uint16_t pulse_us[SERVO_POSE_CHANNEL_COUNT];
-} ServoPose_t;
+#include <servo_control.h>
 
 /**
  * @brief 舵机平滑控制任务的入口函数。
