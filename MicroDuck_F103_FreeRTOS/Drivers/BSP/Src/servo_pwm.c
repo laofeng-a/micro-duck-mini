@@ -22,8 +22,8 @@ HAL_StatusTypeDef ServoPwm_Start(void)
 		TIM_CHANNEL_4
 	    };
 	HAL_StatusTypeDef status;
-	uint32_t i;
-	uint32_t j;
+	uint8_t i;
+	uint8_t j;
 
 	/* 1. 先为四路准备初始中位脉宽 */
 	for (i = 0U; i < SERVO_PWM_CHANNEL_COUNT; i++) {

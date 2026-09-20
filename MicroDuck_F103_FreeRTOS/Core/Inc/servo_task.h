@@ -22,12 +22,11 @@ typedef struct {
  */
 void ServoTask_Entry(void *argument);
 
-/**
- * @brief 设置舵机的目标脉宽。
- * @param requested_us 目标高电平脉宽，单位：微秒。
- * @note 该函数只**更新目标值**；实际 PWM 输出由 ServoTask_Entry 平滑完成。
- *       目标值是“最新值生效”的状态量，下一次调用直接覆盖它，不会排队。
- */
-void ServoTask_SetTargetPulseUs(uint16_t requested_us);
+/*
+ * 实现 ServoTask_SetTargetPose()：一次提交四路目标，继续保持“最新值覆盖旧值”。
+ *  这一步涉及结构体传参和“临界区”——保护一小段不能被并发访问打断的代码。
+ *
+ * */
+void ServoTask_SetTargetPose(ServoPose_t requested_pose);
 
 #endif /* INC_SERVO_TASK_H_ */

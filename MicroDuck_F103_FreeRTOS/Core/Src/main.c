@@ -97,7 +97,16 @@ int main(void)
         Error_Handler();
     }
 
-  ServoTask_SetTargetPulseUs(1600U);
+  ServoPose_t initial_pose = {
+      .pulse_us = {
+          1600U,    /* CH1 */
+          1400U,    /* CH2 */
+          1550U,    /* CH3 */
+          1450U     /* CH4 */
+      }
+  };
+
+  ServoTask_SetTargetPose(initial_pose);
   /* USER CODE END 2 */
 
   /* Init scheduler */

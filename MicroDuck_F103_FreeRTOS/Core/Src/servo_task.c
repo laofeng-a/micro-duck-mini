@@ -16,8 +16,15 @@
 #define SERVO_PULSE_CENTER_US        		 1500U
 #define SERVO_PULSE_MAX_US           		 1800U
 
-/* 目标脉宽是“最新值生效”的状态量：外部只写这一个格子，ServoTask 每 20 ms 读一次。 */
-static volatile uint16_t s_target_us = SERVO_PULSE_CENTER_US;
+
+static volatile ServoPose_t s_target_pose = {
+    .pulse_us = {			/*初始化写法*/
+        SERVO_PULSE_CENTER_US,
+        SERVO_PULSE_CENTER_US,
+        SERVO_PULSE_CENTER_US,
+        SERVO_PULSE_CENTER_US
+    }
+};
 
 static uint16_t ServoTask_StepToward(uint16_t current_us,
 		uint16_t target_us, uint16_t step_us)
@@ -44,39 +51,72 @@ static uint16_t ServoTask_StepToward(uint16_t current_us,
 	return current_us;
 }
 
-void ServoTask_SetTargetPulseUs(uint16_t requested_us) {
-	/* 避免数值不合理，保护 **传入目标值** */
-	if (requested_us < SERVO_PULSE_MIN_US) {
-		requested_us = SERVO_PULSE_MIN_US;
-	} else if (requested_us > SERVO_PULSE_MAX_US) {
-		requested_us = SERVO_PULSE_MAX_US;
-	}
+void ServoTask_SetTargetPose(ServoPose_t requested_pose)
+{
+	uint8_t i;
+	uint32_t saved_primask;
 
-	s_target_us = requested_us; /**/
+	/* 1. 在局部副本中，保护合法值 */
+	for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
+		if (requested_pose.pulse_us[i] < SERVO_PULSE_MIN_US) {
+			requested_pose.pulse_us[i] = SERVO_PULSE_MIN_US;
+		} else if (requested_pose.pulse_us[i] > SERVO_PULSE_MAX_US) {
+			requested_pose.pulse_us[i] = SERVO_PULSE_MAX_US;
+		}
+	}
+	/* 2. 短暂屏蔽可屏蔽中断，提交整组目标 */
+	saved_primask = __get_PRIMASK();
+	__disable_irq();
+
+	s_target_pose = requested_pose;
+
+    /* 3. *恢复*进入前的中断屏蔽状态 */
+    __set_PRIMASK(saved_primask);
 }
 
-void ServoTask_Entry(void *argument) {
-	uint16_t current_us = SERVO_PULSE_CENTER_US;
-	uint16_t target_us =  SERVO_PULSE_CENTER_US;
-	uint32_t next_wake_tick;
+void ServoTask_Entry(void *argument)
+{
+    ServoPose_t current_pose = {
+        .pulse_us = {
+            SERVO_PULSE_CENTER_US,
+            SERVO_PULSE_CENTER_US,
+            SERVO_PULSE_CENTER_US,
+            SERVO_PULSE_CENTER_US
+        }
+    };
 
-	(void) argument;
+    ServoPose_t target_pose;
+    uint32_t saved_primask;
+    uint32_t next_wake_tick;
+    uint8_t i;
 
-	next_wake_tick = osKernelGetTickCount(); /**/
+    (void)argument;
 
-	for (;;) {
-		/* 1. 读取最新目标值；没有新值就沿用上一次的 */
-		target_us = s_target_us;
+    next_wake_tick = osKernelGetTickCount();
 
-		/* 2. 当前输出脉宽向目标靠近一步 */
-		current_us = ServoTask_StepToward(current_us,
-				target_us,
-				SERVO_TASK_STEP_US);
+    for (;;) {
+        /* 1. 在保护下，读取完整的一组目标 */
+        saved_primask = __get_PRIMASK();
+        __disable_irq();
 
-		ServoPwm_SetPulseUs(SERVO_PWM_CH1, current_us);	/*硬件更新*/
+        target_pose = s_target_pose;
 
-		next_wake_tick += SERVO_TASK_PERIOD_MS; /*更新时钟*/
+        __set_PRIMASK(saved_primask);
 
-		osDelayUntil(next_wake_tick);
-	}
+        /* 2. 逐路step to下一步，并更新 PWM */
+        for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
+            current_pose.pulse_us[i] = ServoTask_StepToward(
+                current_pose.pulse_us[i],
+                target_pose.pulse_us[i],
+                SERVO_TASK_STEP_US);
+
+            ServoPwm_SetPulseUs(
+                (ServoPwmChannel_t)i,
+                current_pose.pulse_us[i]);
+        }
+
+        /* 3. 等待下一个更新周期 */
+        next_wake_tick += SERVO_TASK_PERIOD_MS;
+        osDelayUntil(next_wake_tick);
+    }
 }
