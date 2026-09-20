@@ -10,6 +10,12 @@
 
 #include <stdint.h>
 
+#define SERVO_POSE_CHANNEL_COUNT    4U
+
+typedef struct {
+    uint16_t pulse_us[SERVO_POSE_CHANNEL_COUNT];
+} ServoPose_t;
+
 /**
  * @brief 舵机平滑控制任务的入口函数。
  * @param argument CMSIS-RTOS 预留的任务参数，当前未使用。

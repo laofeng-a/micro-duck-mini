@@ -73,7 +73,7 @@ void ServoTask_Entry(void *argument) {
 				target_us,
 				SERVO_TASK_STEP_US);
 
-		ServoPwm_SetPulseUs(current_us);	/*硬件更新*/
+		ServoPwm_SetPulseUs(SERVO_PWM_CH1, current_us);	/*硬件更新*/
 
 		next_wake_tick += SERVO_TASK_PERIOD_MS; /*更新时钟*/
 
