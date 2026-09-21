@@ -18,8 +18,8 @@ typedef struct {			/*作为一组舵机状态*/
 
 typedef enum {			/* 枚举*提交动作，即settarget函数*的结果 */
     SERVO_CONTROL_OK = 0,
-    SERVO_CONTROL_BUSY,
-    SERVO_CONTROL_INVALID_PARAM
+    SERVO_CONTROL_BUSY,				/*调用时繁忙(pending or running)返回*/
+    SERVO_CONTROL_INVALID_PARAM		/*duration 为0时返回*/
 } ServoControlStatus_t;
 
 typedef enum

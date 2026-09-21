@@ -9,6 +9,7 @@
 #include "servo_control.h"
 #include "cmsis_os2.h"
 #include "stm32f1xx_hal.h"
+#include "main.h"
 
 #define SERVO_TASK_PERIOD_MS 20U
 
@@ -88,14 +89,24 @@ void ServoTask_Entry(void *argument)
         if ((next_step < SERVO_TEST_STEP_COUNT) &&
             !ServoControl_IsBusy())
         {
-        	status = ServoControl_SetTargetOffsets(
-        	    s_test_steps[next_step].offsets,
-        	    s_test_steps[next_step].duration_ms);
+        		status = ServoControl_SetTargetOffsets(
+        		s_test_steps[next_step].offsets,
+			s_test_steps[next_step].duration_ms);
 
-            if (status == SERVO_CONTROL_OK)
-            {
-                next_step++;
-            }
+        		if (status == SERVO_CONTROL_OK)
+        		{
+        			/* 提交成功，准备下一段 */
+        			next_step++;
+        		}
+        		else if (status == SERVO_CONTROL_BUSY)
+        		{
+        			/* 暂时不能接收，保持下标，下轮再尝试 */
+        		}
+        		else
+        		{
+        			/* 参数错误或其他异常，交给工程错误处理 */
+        			Error_Handler();
+        		}
         }
 
         next_wake_tick += period_ticks;
