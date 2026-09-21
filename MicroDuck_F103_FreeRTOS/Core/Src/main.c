@@ -25,7 +25,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "servo_pwm.h"
-#include "servo_task.h"
+#include "servo_control.h"
 
 /* USER CODE END Includes */
 
@@ -93,20 +93,11 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  ServoControl_Init();
+
   if (ServoPwm_Start() != HAL_OK) {
         Error_Handler();
     }
-
-  ServoPose_t initial_pose = {
-      .pulse_us = {
-          1700U,    /* CH1 */
-          1500U,    /* CH2 */
-          1500U,    /* CH3 */
-          1500U     /* CH4 */
-      }
-  };
-
-  ServoTask_SetTargetPose(initial_pose);
   /* USER CODE END 2 */
 
   /* Init scheduler */

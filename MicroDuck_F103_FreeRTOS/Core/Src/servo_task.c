@@ -6,117 +6,99 @@
  */
 
 #include "servo_task.h"
-#include "servo_pwm.h"
+#include "servo_control.h"
 #include "cmsis_os2.h"
+#include "stm32f1xx_hal.h"
 
-#define SERVO_TASK_STEP_US                   5U
-#define SERVO_TASK_PERIOD_MS                 20U
+#define SERVO_TASK_PERIOD_MS 20U
 
-#define SERVO_PULSE_MIN_US           		 1200U
-#define SERVO_PULSE_CENTER_US        		 1500U
-#define SERVO_PULSE_MAX_US           		 1800U
+typedef struct
+{
+	ServoOffsetPose_t offsets;
+    uint32_t duration_ms;
+} ServoTestStep_t;
 
-
-static volatile ServoPose_t s_target_pose = {
-    .pulse_us = {			/*初始化写法*/
-        SERVO_PULSE_CENTER_US,
-        SERVO_PULSE_CENTER_US,
-        SERVO_PULSE_CENTER_US,
-        SERVO_PULSE_CENTER_US
+static const ServoTestStep_t s_test_steps[] =
+{
+    {
+        .offsets =
+        {
+            .offset_us =
+            {
+                [SERVO_JOINT_LEFT_LEG]   = 100,
+                [SERVO_JOINT_RIGHT_LEG]  = -100,
+                [SERVO_JOINT_LEFT_FOOT]  = 50,
+                [SERVO_JOINT_RIGHT_FOOT] = -50
+            }
+        },
+        .duration_ms = 800U
+    },
+    {
+        .offsets =
+        {
+            .offset_us =
+            {
+                [SERVO_JOINT_LEFT_LEG]   = -100,
+                [SERVO_JOINT_RIGHT_LEG]  = 100,
+                [SERVO_JOINT_LEFT_FOOT]  = -50,
+                [SERVO_JOINT_RIGHT_FOOT] = 50
+            }
+        },
+        .duration_ms = 400U
+    },
+    {
+        .offsets =
+        {
+            .offset_us =
+            {
+                [SERVO_JOINT_LEFT_LEG]   = 0,
+                [SERVO_JOINT_RIGHT_LEG]  = 0,
+                [SERVO_JOINT_LEFT_FOOT]  = 0,
+                [SERVO_JOINT_RIGHT_FOOT] = 0
+            }
+        },
+        .duration_ms = 800U
     }
 };
 
-static uint16_t ServoTask_StepToward(uint16_t current_us,
-		uint16_t target_us, uint16_t step_us)
-{
-
-	if (current_us < target_us)
-	{
-		if ((target_us - current_us) <= step_us) {
-			return target_us;
-		}
-
-		return current_us + step_us;
-	}
-
-	if (current_us > target_us)
-	{
-		if ((current_us - target_us) <= step_us) {
-			return target_us;
-		}
-
-		return current_us - step_us;
-	}
-
-	return current_us;
-}
-
-void ServoTask_SetTargetPose(ServoPose_t requested_pose)
-{
-	uint8_t i;
-	uint32_t saved_primask;
-
-	/* 1. 在局部副本中，保护合法值 */
-	for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
-		if (requested_pose.pulse_us[i] < SERVO_PULSE_MIN_US) {
-			requested_pose.pulse_us[i] = SERVO_PULSE_MIN_US;
-		} else if (requested_pose.pulse_us[i] > SERVO_PULSE_MAX_US) {
-			requested_pose.pulse_us[i] = SERVO_PULSE_MAX_US;
-		}
-	}
-	/* 2. 短暂屏蔽可屏蔽中断，提交整组目标 */
-	saved_primask = __get_PRIMASK();
-	__disable_irq();
-
-	s_target_pose = requested_pose;
-
-    /* 3. *恢复*进入前的中断屏蔽状态 */
-    __set_PRIMASK(saved_primask);
-}
+#define SERVO_TEST_STEP_COUNT \
+    (sizeof(s_test_steps) / sizeof(s_test_steps[0]))
 
 void ServoTask_Entry(void *argument)
 {
-    ServoPose_t current_pose = {
-        .pulse_us = {
-            SERVO_PULSE_CENTER_US,
-            SERVO_PULSE_CENTER_US,
-            SERVO_PULSE_CENTER_US,
-            SERVO_PULSE_CENTER_US
-        }
-    };
-
-    ServoPose_t target_pose;
-    uint32_t saved_primask;				/*一个寄存器，最后一位表示禁止中断*/
     uint32_t next_wake_tick;
-    uint8_t i;
+    uint32_t period_ticks;
+
+    uint8_t next_step = 0U;
+    ServoControlStatus_t status;
 
     (void)argument;
 
+    period_ticks =
+        (SERVO_TASK_PERIOD_MS * osKernelGetTickFreq()) / 1000U;
+
     next_wake_tick = osKernelGetTickCount();
 
-    for (;;) {
-        /* 1. 在保护下，读取完整的一组目标 */
-        saved_primask = __get_PRIMASK();
-        __disable_irq();
+    for (;;)
+    {
+        /* 推进正在执行的动作 */
+        ServoControl_Update(HAL_GetTick());
 
-        target_pose = s_target_pose;
+        /* 还有未提交的动作，并且控制层空闲 */
+        if ((next_step < SERVO_TEST_STEP_COUNT) &&
+            !ServoControl_IsBusy())
+        {
+        	status = ServoControl_SetTargetOffsets(
+        	    s_test_steps[next_step].offsets,
+        	    s_test_steps[next_step].duration_ms);
 
-        __set_PRIMASK(saved_primask);
-
-        /* 2. 逐路step to下一步，并更新 PWM */
-        for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
-            current_pose.pulse_us[i] = ServoTask_StepToward(
-                current_pose.pulse_us[i],
-                target_pose.pulse_us[i],
-                SERVO_TASK_STEP_US);
-
-            ServoPwm_SetPulseUs(
-                (ServoPwmChannel_t)i,
-                current_pose.pulse_us[i]);
+            if (status == SERVO_CONTROL_OK)
+            {
+                next_step++;
+            }
         }
 
-        /* 3. 等待下一个更新周期 */
-        next_wake_tick += SERVO_TASK_PERIOD_MS;
+        next_wake_tick += period_ticks;
         osDelayUntil(next_wake_tick);
     }
 }
