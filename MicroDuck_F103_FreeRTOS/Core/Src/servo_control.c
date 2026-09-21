@@ -14,6 +14,8 @@
 
 #define SERVO_CONTROL_CENTER_US     	1500U
 
+#define SERVO_CONTROL_MAX_DURATION_MS 10000U
+
 /* 控制器当前处于哪个阶段，状态机 */
 typedef enum {
     SERVO_CONTROL_IDLE = 0,     /* 空闲，可以接受动作 */
@@ -62,8 +64,10 @@ ServoControlStatus_t ServoControl_SetTargetPose(
     uint8_t i;
     uint32_t saved_primask;
 
-    /* 1. 时长不能为零 */
-    if (duration_ms == 0U) {
+    /* 单段动作时长必须在 1～10000ms 内 */
+    if ((duration_ms == 0U) ||
+        (duration_ms > SERVO_CONTROL_MAX_DURATION_MS))
+    {
         return SERVO_CONTROL_INVALID_PARAM;
     }
 

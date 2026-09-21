@@ -19,6 +19,32 @@ typedef struct
     uint32_t duration_ms;
 } ServoTestStep_t;
 
+
+/* 1：回中保持；0：原来的三段动作测试 */
+#define SERVO_TEST_CALIBRATION_MODE 1
+
+#define SERVO_CALIBRATION_JOINT     SERVO_JOINT_LEFT_LEG		/*选择那个关节*/
+#define SERVO_CALIBRATION_OFFSET_US 0						/*多大逻辑偏移*/
+
+#if SERVO_TEST_CALIBRATION_MODE
+
+static const ServoTestStep_t s_test_steps[] =
+{
+    {
+        .offsets =
+        {
+            .offset_us =
+            {
+                [SERVO_CALIBRATION_JOINT] =
+                    SERVO_CALIBRATION_OFFSET_US
+            }
+        },
+        .duration_ms = 800U
+    }
+};
+
+#else
+
 static const ServoTestStep_t s_test_steps[] =
 {
     {
@@ -61,6 +87,7 @@ static const ServoTestStep_t s_test_steps[] =
         .duration_ms = 800U
     }
 };
+#endif
 
 #define SERVO_TEST_STEP_COUNT \
     (sizeof(s_test_steps) / sizeof(s_test_steps[0]))
