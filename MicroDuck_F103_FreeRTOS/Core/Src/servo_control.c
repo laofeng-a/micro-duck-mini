@@ -220,7 +220,7 @@ s_joint_calibration[SERVO_POSE_CHANNEL_COUNT] =
     }
 };
 
-/*输入逻辑偏移值，进行转换后调用settargetpose执行*/
+/*输入逻辑偏移值，进行换算后调用settargetpose执行*/
 ServoControlStatus_t ServoControl_SetTargetOffsets(
     ServoOffsetPose_t target_offsets,
     uint32_t duration_ms)
@@ -231,7 +231,21 @@ ServoControlStatus_t ServoControl_SetTargetOffsets(
 
     for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
     {
-        /* 逻辑偏移转换为实际脉宽 */
+    		/* 先检查，校准中位必须处于当前允许的脉宽范围 */
+    		if ((s_joint_calibration[i].center_us < SERVO_CONTROL_MIN_US) ||
+    			(s_joint_calibration[i].center_us > SERVO_CONTROL_MAX_US))
+    		{
+    			return SERVO_CONTROL_INVALID_PARAM;
+    		}
+
+    		/* 方向只能是 +1 或 -1 */
+    		if ((s_joint_calibration[i].direction != 1) &&
+    			(s_joint_calibration[i].direction != -1))
+    		{
+    			return SERVO_CONTROL_INVALID_PARAM;
+    		}
+
+    		/* 逻辑偏移转换为实际脉宽 */
         pulse_us =
             (int32_t)s_joint_calibration[i].center_us +
             (int32_t)s_joint_calibration[i].direction *

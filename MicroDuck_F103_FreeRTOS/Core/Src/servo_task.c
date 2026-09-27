@@ -9,26 +9,24 @@
 #include "servo_control.h"
 #include "cmsis_os2.h"
 #include "stm32f1xx_hal.h"
+#include "motion_sequence.h"
 #include "main.h"
+#include <stdbool.h>
+
 
 #define SERVO_TASK_PERIOD_MS 20U
-
-typedef struct
-{
-	ServoOffsetPose_t offsets;
-    uint32_t duration_ms;
-} ServoTestStep_t;
+#define SERVO_SEQUENCE_STOP_TEST_MS 5000U
 
 
 /* 1：回中保持；0：原来的三段动作测试 */
 #define SERVO_TEST_CALIBRATION_MODE 1
 
 #define SERVO_CALIBRATION_JOINT     SERVO_JOINT_LEFT_LEG		/*选择那个关节*/
-#define SERVO_CALIBRATION_OFFSET_US 0						/*多大逻辑偏移*/
+#define SERVO_CALIBRATION_OFFSET_US 0							/*多大逻辑偏移*/
 
 #if SERVO_TEST_CALIBRATION_MODE
 
-static const ServoTestStep_t s_test_steps[] =
+static const MotionStep_t s_test_steps[] =
 {
     {
         .offsets =
@@ -45,7 +43,7 @@ static const ServoTestStep_t s_test_steps[] =
 
 #else
 
-static const ServoTestStep_t s_test_steps[] =
+static const MotionStep_t s_test_steps[] =
 {
     {
         .offsets =
@@ -96,11 +94,24 @@ void ServoTask_Entry(void *argument)
 {
     uint32_t next_wake_tick;
     uint32_t period_ticks;
-
-    uint8_t next_step = 0U;
-    ServoControlStatus_t status;
+    uint32_t sequence_start_ms;
+    uint32_t now_ms;
+    MotionSequenceStatus_t status;
+    bool stop_sent = false;
 
     (void)argument;
+
+    /* 启动时提交循环执行的整套序列 */
+    status = MotionSequence_SetTargetSequence(
+        s_test_steps, SERVO_TEST_STEP_COUNT, MOTION_SEQUENCE_LOOP);
+
+    if (status != MOTION_SEQUENCE_OK)
+    {
+        Error_Handler();
+    }
+
+    /* 从成功提交序列之后开始计时 */
+    sequence_start_ms = HAL_GetTick();
 
     period_ticks =
         (SERVO_TASK_PERIOD_MS * osKernelGetTickFreq()) / 1000U;
@@ -109,31 +120,26 @@ void ServoTask_Entry(void *argument)
 
     for (;;)
     {
-        /* 推进正在执行的动作 */
-        ServoControl_Update(HAL_GetTick());
+        now_ms = HAL_GetTick();
 
-        /* 还有未提交的动作，并且控制层空闲 */
-        if ((next_step < SERVO_TEST_STEP_COUNT) &&
-            !ServoControl_IsBusy())
+        /* 满 5 秒时，只发送一次停止请求 */
+        if ((!stop_sent) &&
+            ((now_ms - sequence_start_ms) >=
+             SERVO_SEQUENCE_STOP_TEST_MS))
         {
-        		status = ServoControl_SetTargetOffsets(
-        		s_test_steps[next_step].offsets,
-			s_test_steps[next_step].duration_ms);
+            MotionSequence_RequestStop();
+            stop_sent = true;
+        }
 
-        		if (status == SERVO_CONTROL_OK)
-        		{
-        			/* 提交成功，准备下一段 */
-        			next_step++;
-        		}
-        		else if (status == SERVO_CONTROL_BUSY)
-        		{
-        			/* 暂时不能接收，保持下标，下轮再尝试 */
-        		}
-        		else
-        		{
-        			/* 参数错误或其他异常，交给工程错误处理 */
-        			Error_Handler();
-        		}
+        /* 推进当前段，再推进整套序列 */
+        ServoControl_Update(now_ms);
+
+        MotionSequence_Update();
+
+        /* 当前测试程序对序列执行错误的处理 */
+        if (MotionSequence_GetState() == MOTION_SEQUENCE_ERROR)
+        {
+            Error_Handler();
         }
 
         next_wake_tick += period_ticks;
