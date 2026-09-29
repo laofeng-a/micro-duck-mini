@@ -9,12 +9,12 @@
 #include "stm32f1xx.h"  			/* 提供 CMSIS 中断控制接口 */
 #include "servo_pwm.h"
 
-#define SERVO_CONTROL_MIN_US   	 	1200U
-#define SERVO_CONTROL_MAX_US    	    1800U
+#define SERVO_CONTROL_MIN_US 			SERVO_PWM_MIN_PULSE_US
+#define SERVO_CONTROL_MAX_US 			SERVO_PWM_MAX_PULSE_US
 
 #define SERVO_CONTROL_CENTER_US     	1500U
 
-#define SERVO_CONTROL_MAX_DURATION_MS 10000U
+#define SERVO_CONTROL_MAX_DURATION_MS 	10000U
 
 /* 控制器当前处于哪个阶段，状态机 */
 typedef enum {
@@ -23,7 +23,7 @@ typedef enum {
     SERVO_CONTROL_RUNNING       /* 正在执行 */
 } ServoControlState_t;
 
-/* 一次运动的所有状态，包含所有新定义的结构体 */
+/* 一次运动的所有状态 */
 typedef struct {
     ServoPose_t start_pose;
     ServoPose_t current_pose;
@@ -38,64 +38,121 @@ typedef struct {
 /* 模块内部唯一的一份控制状态 */
 static ServoControlContext_t s_control;
 
-/*仅改动初始值，不执行。即进行初始化*/
-void ServoControl_Init(void)
+/* 各关节校准参数，使用关节枚举指定数组下标 */
+static const ServoJointCalibration_t
+s_joint_calibration[SERVO_POSE_CHANNEL_COUNT] =
 {
-	uint8_t i;
-	/* 1. 当前输出记录初始化为四路中位 */
-	for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
-		s_control.current_pose.pulse_us[i] =
-			SERVO_CONTROL_CENTER_US;
-	}
-
-	/* 2. 初始起点、目标均与当前值一致 */
-	s_control.start_pose = s_control.current_pose;
-	s_control.target_pose = s_control.current_pose;
-
-	/* 3. 尚未开始任何动作 */
-	s_control.start_ms = 0U;
-	s_control.duration_ms = 0U;
-	s_control.state = SERVO_CONTROL_IDLE;
-}
-
-ServoControlStatus_t ServoControl_SetTargetPose(
-    ServoPose_t target_pose, uint32_t duration_ms)
-{
-    uint8_t i;
-    uint32_t saved_primask;
-
-    /* 单段动作时长必须在 1～10000ms 内 */
-    if ((duration_ms == 0U) ||
-        (duration_ms > SERVO_CONTROL_MAX_DURATION_MS))
+    [SERVO_JOINT_LEFT_LEG] =
     {
-        return SERVO_CONTROL_INVALID_PARAM;
-    }
+        .center_us = SERVO_CONTROL_CENTER_US,
+		.min_us = 1200U,
+		.max_us = 1800U,
+		.direction = -1
+    },
+	[SERVO_JOINT_RIGHT_LEG] =
+	{
+	    .center_us = 1900U,
+	    .min_us = 1200U,
+	    .max_us = 2000U,
+	    .direction = 1
+	},
+    [SERVO_JOINT_LEFT_FOOT] =
+    {
+        .center_us = SERVO_CONTROL_CENTER_US,
+		.min_us = 1200U,
+		.max_us = 1800U,
+		.direction = 1
+    },
+	[SERVO_JOINT_RIGHT_FOOT] =
+	{
+	    .center_us = 1400U,  /* 修改：右脚候选中位 */
+	    .min_us = 1200U,
+	    .max_us = 1800U,
+	    .direction = -1
+	}
+};
 
-    /* 2. 对传入的姿态副本进行限幅 */
-    for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++) {
-        if (target_pose.pulse_us[i] < SERVO_CONTROL_MIN_US) {
-            target_pose.pulse_us[i] = SERVO_CONTROL_MIN_US;
-        } else if (target_pose.pulse_us[i] > SERVO_CONTROL_MAX_US) {
-            target_pose.pulse_us[i] = SERVO_CONTROL_MAX_US;
+/* 启动时检查配置、预装 PWM 脉宽并初始化控制状态 */
+ServoControlStatus_t ServoControl_Init(void)
+{
+    ServoPose_t initial_pose;
+    uint8_t i;
+
+    /* 全部配置检查通过后，才修改任何 CCR */
+    for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
+    {
+        if ((s_joint_calibration[i].min_us >
+             s_joint_calibration[i].max_us) ||
+            (s_joint_calibration[i].center_us <
+             s_joint_calibration[i].min_us) ||
+            (s_joint_calibration[i].center_us >
+             s_joint_calibration[i].max_us))
+        {
+            return SERVO_CONTROL_INVALID_PARAM;
         }
+
+        if ((s_joint_calibration[i].min_us <
+             SERVO_CONTROL_MIN_US) ||
+            (s_joint_calibration[i].max_us >
+             SERVO_CONTROL_MAX_US))
+        {
+            return SERVO_CONTROL_INVALID_PARAM;
+        }
+
+        if ((s_joint_calibration[i].direction != 1) &&
+            (s_joint_calibration[i].direction != -1))
+        {
+            return SERVO_CONTROL_INVALID_PARAM;
+        }
+
+        initial_pose.pulse_us[i] = s_joint_calibration[i].center_us;
     }
 
-    /* 3. 保护“检查状态 + 提交动作”的整个过程 */
-    saved_primask = __get_PRIMASK();
-    __disable_irq();
-
-    if (s_control.state != SERVO_CONTROL_IDLE) {
-        __set_PRIMASK(saved_primask);
-        return SERVO_CONTROL_BUSY;
+    for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
+    {
+        ServoPwm_SetPulseUs((ServoPwmChannel_t)i,
+                            initial_pose.pulse_us[i]);
     }
 
-    s_control.target_pose = target_pose;
-    s_control.duration_ms = duration_ms;
-    s_control.state = SERVO_CONTROL_PENDING;
-
-    __set_PRIMASK(saved_primask);
+    s_control.current_pose = initial_pose;
+    s_control.start_pose = initial_pose;
+    s_control.target_pose = initial_pose;
+    s_control.start_ms = 0U;
+    s_control.duration_ms = 0U;
+    s_control.state = SERVO_CONTROL_IDLE;
 
     return SERVO_CONTROL_OK;
+}
+
+static ServoControlStatus_t ServoControl_SetTargetPose(
+    ServoPose_t target_pose, uint32_t duration_ms)
+{
+	uint32_t saved_primask;
+
+	    /* 1. 检查本次动作时长 */
+	    if ((duration_ms == 0U) ||
+	        (duration_ms > SERVO_CONTROL_MAX_DURATION_MS))
+	    {
+	        return SERVO_CONTROL_INVALID_PARAM;
+	    }
+
+	    /* 2. 保护“检查状态 + 提交动作” */
+	    saved_primask = __get_PRIMASK();
+	    __disable_irq();
+
+	    if (s_control.state != SERVO_CONTROL_IDLE)
+	    {
+	        __set_PRIMASK(saved_primask);
+	        return SERVO_CONTROL_BUSY;
+	    }
+
+	    s_control.target_pose = target_pose;
+	    s_control.duration_ms = duration_ms;
+	    s_control.state = SERVO_CONTROL_PENDING;
+
+	    __set_PRIMASK(saved_primask);
+
+	    return SERVO_CONTROL_OK;
 }
 
 void ServoControl_Update(uint32_t now_ms)	/*根据时间和当前状态计算舵机输出值*/
@@ -161,8 +218,7 @@ void ServoControl_Update(uint32_t now_ms)	/*根据时间和当前状态计算舵
     for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
     {
         ServoPwm_SetPulseUs(
-            (ServoPwmChannel_t)i,
-            next_pose.pulse_us[i]);
+            (ServoPwmChannel_t)i, next_pose.pulse_us[i]);
     }
 
     /* 5. 保存本次输出，必要时结束动作 */
@@ -195,76 +251,36 @@ bool ServoControl_IsBusy(void)
     return is_busy;
 }
 
-static const ServoJointCalibration_t
-s_joint_calibration[SERVO_POSE_CHANNEL_COUNT] =
-{
-    [SERVO_JOINT_LEFT_LEG] =
-    {
-        .center_us = SERVO_CONTROL_CENTER_US,
-        .direction = 1
-    },
-    [SERVO_JOINT_RIGHT_LEG] =
-    {
-        .center_us = SERVO_CONTROL_CENTER_US,
-        .direction = 1
-    },
-    [SERVO_JOINT_LEFT_FOOT] =
-    {
-        .center_us = SERVO_CONTROL_CENTER_US,
-        .direction = 1
-    },
-    [SERVO_JOINT_RIGHT_FOOT] =
-    {
-        .center_us = SERVO_CONTROL_CENTER_US,
-        .direction = 1
-    }
-};
-
-/*输入逻辑偏移值，进行换算后调用settargetpose执行*/
+/*输入逻辑偏移值，进行换算和保护后调用settargetpose执行*/
 ServoControlStatus_t ServoControl_SetTargetOffsets(
-    ServoOffsetPose_t target_offsets,
-    uint32_t duration_ms)
+    ServoOffsetPose_t target_offsets, uint32_t duration_ms)
 {
     ServoPose_t target_pose;
-    int32_t pulse_us;			/*使用该变量作为副本传值*/
+    int32_t pulse_us;
     uint8_t i;
 
     for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
     {
-    		/* 先检查，校准中位必须处于当前允许的脉宽范围 */
-    		if ((s_joint_calibration[i].center_us < SERVO_CONTROL_MIN_US) ||
-    			(s_joint_calibration[i].center_us > SERVO_CONTROL_MAX_US))
-    		{
-    			return SERVO_CONTROL_INVALID_PARAM;
-    		}
-
-    		/* 方向只能是 +1 或 -1 */
-    		if ((s_joint_calibration[i].direction != 1) &&
-    			(s_joint_calibration[i].direction != -1))
-    		{
-    			return SERVO_CONTROL_INVALID_PARAM;
-    		}
-
-    		/* 逻辑偏移转换为实际脉宽 */
+        /* 1. 逻辑偏移换算为实际脉宽 */
         pulse_us =
             (int32_t)s_joint_calibration[i].center_us +
             (int32_t)s_joint_calibration[i].direction *
             target_offsets.offset_us[i];
 
-        /* 在转换为无符号数之前限幅 */
-        if (pulse_us < (int32_t)SERVO_CONTROL_MIN_US)
+        /* 2. 按当前关节的范围限幅 */
+        if (pulse_us < (int32_t)s_joint_calibration[i].min_us)
         {
-            pulse_us = (int32_t)SERVO_CONTROL_MIN_US;
+            pulse_us = (int32_t)s_joint_calibration[i].min_us;
         }
-        else if (pulse_us > (int32_t)SERVO_CONTROL_MAX_US)
+        else if (pulse_us >
+                 (int32_t)s_joint_calibration[i].max_us)
         {
-            pulse_us = (int32_t)SERVO_CONTROL_MAX_US;
+            pulse_us = (int32_t)s_joint_calibration[i].max_us;
         }
 
+        /* 3. 限幅后再转成无符号脉宽 */
         target_pose.pulse_us[i] = (uint16_t)pulse_us;
     }
 
-    return ServoControl_SetTargetPose(
-        target_pose,
-        duration_ms);
+    return ServoControl_SetTargetPose(target_pose, duration_ms);
 }

@@ -8,6 +8,9 @@
 #ifndef BSP_INC_SERVO_PWM_H_
 #define BSP_INC_SERVO_PWM_H_
 
+/* 驱动当前允许的脉宽窗口，不代表各关节的机械安全范围 */
+#define SERVO_PWM_MIN_PULSE_US 1200U
+#define SERVO_PWM_MAX_PULSE_US 2000U
 
 #include <stdint.h>
 #include "stm32f1xx_hal.h"
@@ -21,10 +24,7 @@ typedef enum {				/*表示哪一路舵机*/
     SERVO_PWM_CHANNEL_COUNT	/*表示通道数量，供后续循环使用；它不是一个可操作的通道。*/
 } ServoPwmChannel_t;
 
-/**
- * @brief  启动当前舵机PWM输出
- * @retval HAL_OK表示启动成功
- */
+/* 脉宽由调用方预装；只负责开启四路 PWM，全部成功时返回 HAL_OK。 */
 HAL_StatusTypeDef ServoPwm_Start(void);
 
 /**

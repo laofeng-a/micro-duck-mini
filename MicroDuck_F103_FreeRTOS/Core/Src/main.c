@@ -93,7 +93,9 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-  ServoControl_Init();
+  if (ServoControl_Init() != SERVO_CONTROL_OK) {
+      Error_Handler();
+  }
 
   if (ServoPwm_Start() != HAL_OK) {
         Error_Handler();

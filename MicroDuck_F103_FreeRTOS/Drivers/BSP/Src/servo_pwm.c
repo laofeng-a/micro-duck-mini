@@ -8,11 +8,6 @@
 #include "servo_pwm.h"
 #include "tim.h"
 
-#define SERVO_PWM_MIN_PULSE_US       1200U
-#define SERVO_PWM_CENTER_PULSE_US    1500U
-#define SERVO_PWM_MAX_PULSE_US       1800U
-
-
 HAL_StatusTypeDef ServoPwm_Start(void)
 {
 	static const uint32_t tim_channels[SERVO_PWM_CHANNEL_COUNT] = {
@@ -25,14 +20,7 @@ HAL_StatusTypeDef ServoPwm_Start(void)
 	uint8_t i;
 	uint8_t j;
 
-	/* 1. 先为四路准备初始中位脉宽 */
-	for (i = 0U; i < SERVO_PWM_CHANNEL_COUNT; i++) {
-		ServoPwm_SetPulseUs(
-			(ServoPwmChannel_t)i,
-			SERVO_PWM_CENTER_PULSE_US);
-	}
-
-	/* 2. 逐路启动 PWM */
+	/* 脉宽已由调用方预装，这里只启动 PWM */
 	for (i = 0U; i < SERVO_PWM_CHANNEL_COUNT; i++) {
 		status = HAL_TIM_PWM_Start(&htim3, tim_channels[i]);
 
