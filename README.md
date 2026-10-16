@@ -23,6 +23,14 @@ I am keeping the unfinished code and its exact stopping point so I can return to
 
 The incomplete edits include a `PAUSE` / `PAUSED` enum mismatch, missing sequence pause/resume definitions, and unfinished functions at the end of `robot_action.c`. A syntax check using the existing ARM GCC confirmed errors. No full build or hardware test was performed for this checkpoint.
 
+## Hardware demo
+
+[![Micro Duck hardware experiment preview](media/demo-preview.jpg)](media/micro-duck-demo.mp4)
+
+[Watch or download the original demo video](media/micro-duck-demo.mp4) — MP4, approximately 20.6 seconds, 46.5 MiB.
+
+This recording is part of my hands-on learning record. The firmware revision used for the recording was not identified, so it does not establish that the unfinished pause/resume code in this snapshot works. The original video is preserved without re-encoding.
+
 ## Hardware and tools
 
 - STM32F103ZET6 development board: ALIENTEK Elite board.
@@ -63,6 +71,7 @@ MicroDuck_F103_FreeRTOS/
   Drivers/ and Middlewares/
     STM32 HAL, CMSIS, and FreeRTOS
 3D代打_原始Otto_V9/    mechanical reference files and printing notes
+media/               original hardware demo and a preview image
 项目现状.md           detailed project status and restart checklist
 答疑.md               concepts, explanations, and learning notes
 ```
