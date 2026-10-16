@@ -12,7 +12,11 @@
 #define SERVO_CONTROL_MIN_US 			SERVO_PWM_MIN_PULSE_US
 #define SERVO_CONTROL_MAX_US 			SERVO_PWM_MAX_PULSE_US
 
-#define SERVO_CONTROL_CENTER_US     	1500U
+#define SERVO_CONTROL_LEFT_LEG_CENTER_US  1500U
+#define SERVO_CONTROL_RIGHT_LEG_CENTER_US 1900U
+#define SERVO_CONTROL_LEFT_FOOT_CENTER_US 1500U
+#define SERVO_CONTROL_RIGHT_FOOT_CENTER_US 1400U
+#define SERVO_CONTROL_OFFSET_LIMIT_US    1000U
 
 #define SERVO_CONTROL_MAX_DURATION_MS 	10000U
 
@@ -44,30 +48,30 @@ s_joint_calibration[SERVO_POSE_CHANNEL_COUNT] =
 {
     [SERVO_JOINT_LEFT_LEG] =
     {
-        .center_us = SERVO_CONTROL_CENTER_US,
-		.min_us = 1200U,
-		.max_us = 1800U,
+        .center_us = SERVO_CONTROL_LEFT_LEG_CENTER_US,
+		.min_us = SERVO_CONTROL_LEFT_LEG_CENTER_US - SERVO_CONTROL_OFFSET_LIMIT_US,
+		.max_us = SERVO_CONTROL_LEFT_LEG_CENTER_US + SERVO_CONTROL_OFFSET_LIMIT_US,
 		.direction = -1
     },
 	[SERVO_JOINT_RIGHT_LEG] =
 	{
-	    .center_us = 1900U,
-	    .min_us = 1200U,
-	    .max_us = 2000U,
+	    .center_us = SERVO_CONTROL_RIGHT_LEG_CENTER_US,
+	    .min_us = SERVO_CONTROL_RIGHT_LEG_CENTER_US - SERVO_CONTROL_OFFSET_LIMIT_US,
+	    .max_us = SERVO_CONTROL_RIGHT_LEG_CENTER_US + SERVO_CONTROL_OFFSET_LIMIT_US,
 	    .direction = 1
 	},
     [SERVO_JOINT_LEFT_FOOT] =
     {
-        .center_us = SERVO_CONTROL_CENTER_US,
-		.min_us = 1200U,
-		.max_us = 1800U,
+        .center_us = SERVO_CONTROL_LEFT_FOOT_CENTER_US,
+		.min_us = SERVO_CONTROL_LEFT_FOOT_CENTER_US - SERVO_CONTROL_OFFSET_LIMIT_US,
+		.max_us = SERVO_CONTROL_LEFT_FOOT_CENTER_US + SERVO_CONTROL_OFFSET_LIMIT_US,
 		.direction = 1
     },
 	[SERVO_JOINT_RIGHT_FOOT] =
 	{
-	    .center_us = 1400U,  /* 修改：右脚候选中位 */
-	    .min_us = 1200U,
-	    .max_us = 1800U,
+	    .center_us = SERVO_CONTROL_RIGHT_FOOT_CENTER_US,
+	    .min_us = SERVO_CONTROL_RIGHT_FOOT_CENTER_US - SERVO_CONTROL_OFFSET_LIMIT_US,
+	    .max_us = SERVO_CONTROL_RIGHT_FOOT_CENTER_US + SERVO_CONTROL_OFFSET_LIMIT_US,
 	    .direction = -1
 	}
 };
@@ -110,8 +114,7 @@ ServoControlStatus_t ServoControl_Init(void)
 
     for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
     {
-        ServoPwm_SetPulseUs((ServoPwmChannel_t)i,
-                            initial_pose.pulse_us[i]);
+        ServoPwm_SetPulseUs((ServoPwmChannel_t)i, initial_pose.pulse_us[i]);
     }
 
     s_control.current_pose = initial_pose;
@@ -217,8 +220,7 @@ void ServoControl_Update(uint32_t now_ms)	/*根据时间和当前状态计算舵
     /* 4. 将本次计算结果交给 PWM 驱动 */
     for (i = 0U; i < SERVO_POSE_CHANNEL_COUNT; i++)
     {
-        ServoPwm_SetPulseUs(
-            (ServoPwmChannel_t)i, next_pose.pulse_us[i]);
+        ServoPwm_SetPulseUs((ServoPwmChannel_t)i, next_pose.pulse_us[i]);
     }
 
     /* 5. 保存本次输出，必要时结束动作 */

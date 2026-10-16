@@ -9,8 +9,8 @@
 #define BSP_INC_SERVO_PWM_H_
 
 /* 驱动当前允许的脉宽窗口，不代表各关节的机械安全范围 */
-#define SERVO_PWM_MIN_PULSE_US 1200U
-#define SERVO_PWM_MAX_PULSE_US 2000U
+#define SERVO_PWM_MIN_PULSE_US 400U
+#define SERVO_PWM_MAX_PULSE_US 2900U
 
 #include <stdint.h>
 #include "stm32f1xx_hal.h"

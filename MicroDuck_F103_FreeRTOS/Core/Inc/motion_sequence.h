@@ -31,7 +31,8 @@ typedef enum
 {
     MOTION_SEQUENCE_OK = 0,
     MOTION_SEQUENCE_BUSY,
-    MOTION_SEQUENCE_INVALID_PARAM
+    MOTION_SEQUENCE_INVALID_PARAM,
+	MOTION_SEQUENCE_INVALID_STATE
 } MotionSequenceStatus_t;
 
 /* 整套序列的运行状态机，同样是描述序列动作的。 */
@@ -41,6 +42,7 @@ typedef enum
     MOTION_SEQUENCE_RUNNING,
     MOTION_SEQUENCE_COMPLETED,
     MOTION_SEQUENCE_ERROR,
+	MOTION_SEQUENCE_PAUSE,
     MOTION_SEQUENCE_STOPPED
 } MotionSequenceState_t;
 
@@ -63,4 +65,9 @@ bool MotionSequence_IsBusy(void);
 /* 请求完成当前段后停止；函数本身不等待 */
 void MotionSequence_RequestStop(void);
 
+/* 请求段末暂停；OK 表示请求被接受，不代表已经暂停。 */
+MotionSequenceStatus_t MotionSequence_RequestPause(void);
+
+/* 从 PAUSED 恢复；暂停尚未生效时返回 BUSY。 */
+MotionSequenceStatus_t MotionSequence_Resume(void);
 #endif

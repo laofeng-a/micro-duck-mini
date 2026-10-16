@@ -7,141 +7,110 @@
 
 #include "servo_task.h"
 #include "servo_control.h"
+#include "motion_sequence.h"
+#include "robot_action.h"
 #include "cmsis_os2.h"
 #include "stm32f1xx_hal.h"
-#include "motion_sequence.h"
 #include "main.h"
-#include <stdbool.h>
-
 
 #define SERVO_TASK_PERIOD_MS 20U
-#define SERVO_SEQUENCE_STOP_TEST_MS 5000U
-
-
-/* 1：回中保持；0：原来的三段动作测试 */
-#define SERVO_TEST_CALIBRATION_MODE 1
-
-#define SERVO_CALIBRATION_JOINT     SERVO_JOINT_LEFT_LEG		/*选择那个关节*/
-#define SERVO_CALIBRATION_OFFSET_US 0							/*多大逻辑偏移*/
-
-#if SERVO_TEST_CALIBRATION_MODE
-
-static const MotionStep_t s_test_steps[] =
-{
-    {
-        .offsets =
-        {
-            .offset_us =
-            {
-                [SERVO_CALIBRATION_JOINT] =
-                    SERVO_CALIBRATION_OFFSET_US
-            }
-        },
-        .duration_ms = 800U
-    }
-};
-
-#else
-
-static const MotionStep_t s_test_steps[] =
-{
-    {
-        .offsets =
-        {
-            .offset_us =
-            {
-                [SERVO_JOINT_LEFT_LEG]   = 100,
-                [SERVO_JOINT_RIGHT_LEG]  = -100,
-                [SERVO_JOINT_LEFT_FOOT]  = 50,
-                [SERVO_JOINT_RIGHT_FOOT] = -50
-            }
-        },
-        .duration_ms = 800U
-    },
-    {
-        .offsets =
-        {
-            .offset_us =
-            {
-                [SERVO_JOINT_LEFT_LEG]   = -100,
-                [SERVO_JOINT_RIGHT_LEG]  = 100,
-                [SERVO_JOINT_LEFT_FOOT]  = -50,
-                [SERVO_JOINT_RIGHT_FOOT] = 50
-            }
-        },
-        .duration_ms = 400U
-    },
-    {
-        .offsets =
-        {
-            .offset_us =
-            {
-                [SERVO_JOINT_LEFT_LEG]   = 0,
-                [SERVO_JOINT_RIGHT_LEG]  = 0,
-                [SERVO_JOINT_LEFT_FOOT]  = 0,
-                [SERVO_JOINT_RIGHT_FOOT] = 0
-            }
-        },
-        .duration_ms = 800U
-    }
-};
-#endif
-
-#define SERVO_TEST_STEP_COUNT \
-    (sizeof(s_test_steps) / sizeof(s_test_steps[0]))
 
 void ServoTask_Entry(void *argument)
 {
     uint32_t next_wake_tick;
     uint32_t period_ticks;
-    uint32_t sequence_start_ms;
+    uint32_t test_start_ms;
     uint32_t now_ms;
-    MotionSequenceStatus_t status;
-    bool stop_sent = false;
+    uint32_t elapsed_ms;
+
+    uint8_t test_step = 0U;
+
+    RobotActionStatus_t request_status; /*请求状态和更新状态*/
+    RobotActionStatus_t update_status;
 
     (void)argument;
 
-    /* 启动时提交循环执行的整套序列 */
-    status = MotionSequence_SetTargetSequence(
-        s_test_steps, SERVO_TEST_STEP_COUNT, MOTION_SEQUENCE_LOOP);
+    period_ticks = (SERVO_TASK_PERIOD_MS * osKernelGetTickFreq()) / 1000U;
 
-    if (status != MOTION_SEQUENCE_OK)
+    if (period_ticks == 0U)
     {
         Error_Handler();
     }
 
-    /* 从成功提交序列之后开始计时 */
-    sequence_start_ms = HAL_GetTick();
-
-    period_ticks =
-        (SERVO_TASK_PERIOD_MS * osKernelGetTickFreq()) / 1000U;
-
     next_wake_tick = osKernelGetTickCount();
+    test_start_ms = HAL_GetTick();
 
     for (;;)
     {
         now_ms = HAL_GetTick();
+        elapsed_ms = now_ms - test_start_ms;/*任务执行时间*/
 
-        /* 满 5 秒时，只发送一次停止请求 */
-        if ((!stop_sent) &&
-            ((now_ms - sequence_start_ms) >=
-             SERVO_SEQUENCE_STOP_TEST_MS))
+        /*
+         * 1. 产生测试请求。
+         * test_step 只在请求成功接受后推进，
+         * 避免每个周期重复提交同一个已接受的请求。
+         */
+        request_status = ROBOT_ACTION_OK;
+
+        if ((test_step == 0U) && (elapsed_ms >= 1000U))
         {
-            MotionSequence_RequestStop();
-            stop_sent = true;
+            /* 任务启动约 1 秒后：请求前进。 */
+            request_status =
+                RobotAction_SetTargetAction(ROBOT_ACTION_WALK);
+
+            if (request_status == ROBOT_ACTION_OK)
+            {
+                test_step = 1U;
+            }
+        }
+        else if ((test_step == 1U) && (elapsed_ms >= 4000U))
+        {
+            /* 任务启动约 4 秒后：请求切换左转。 */
+            request_status =
+                RobotAction_SetTargetAction(ROBOT_ACTION_TURN_LEFT);
+
+            if (request_status == ROBOT_ACTION_OK)
+            {
+                test_step = 2U;
+            }
+        }
+        else if ((test_step == 2U) && (elapsed_ms >= 7000U))
+        {
+            /* 任务启动约 7 秒后：请求停止，只调用一次。 */
+            RobotAction_RequestStop();
+            test_step = 3U;
         }
 
-        /* 推进当前段，再推进整套序列 */
-        ServoControl_Update(now_ms);
-
-        MotionSequence_Update();
-
-        /* 当前测试程序对序列执行错误的处理 */
-        if (MotionSequence_GetState() == MOTION_SEQUENCE_ERROR)
+        /*
+         * BUSY 表示本次请求没有被接受：
+         * test_step 不变，下个周期再尝试。
+         */
+        if ((request_status != ROBOT_ACTION_OK) &&
+            (request_status != ROBOT_ACTION_BUSY))
         {
             Error_Handler();
         }
 
+        /* 2. 推进当前段的插值与 PWM 输出。 */
+        ServoControl_Update(now_ms);
+
+        /* 3. 处理序列停止，或提交当前序列的下一段。 */
+        MotionSequence_Update();
+
+        /* 4. 旧序列停完后，提交待切换的新动作。 */
+        update_status = RobotAction_Update();
+
+        /*
+         * Update 返回 BUSY 是正常等待，不是错误。
+         * 其他异常沿用现有的错误处理方式。
+         */
+        if ((update_status != ROBOT_ACTION_OK) &&
+            (update_status != ROBOT_ACTION_BUSY))
+        {
+            Error_Handler();
+        }
+
+        /* 5. 维持约 20 ms 的任务周期。 */
         next_wake_tick += period_ticks;
         osDelayUntil(next_wake_tick);
     }

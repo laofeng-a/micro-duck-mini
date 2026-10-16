@@ -20,6 +20,7 @@ typedef struct					  /*动作表*/
     uint16_t next_step;           /* 下一段待提交动作的下标 */
     MotionSequenceMode_t mode;    /*执行方式 */
     bool stop_requested;  		  /* 是否收到停止请求 */
+    bool pause_requested;		  /*收到暂停请求*/
     MotionSequenceState_t state;  /* 整套序列的状态 */
 } MotionSequenceContext_t;
 
@@ -30,9 +31,11 @@ static MotionSequenceContext_t s_sequence =
     .next_step = 0U,
 	.mode = MOTION_SEQUENCE_ONCE,
 	.stop_requested = false,
+	.pause_requested = false,
     .state = MOTION_SEQUENCE_IDLE
 };
 
+/*传steps数组进来*/
 MotionSequenceStatus_t MotionSequence_SetTargetSequence(
     const MotionStep_t *steps, uint16_t step_count, MotionSequenceMode_t mode)
 {
@@ -55,7 +58,8 @@ MotionSequenceStatus_t MotionSequence_SetTargetSequence(
     __disable_irq();
 
     if ((s_sequence.state == MOTION_SEQUENCE_RUNNING) ||
-        ServoControl_IsBusy())
+        (s_sequence.state == MOTION_SEQUENCE_PAUSED) ||
+        ServoControl_IsBusy())			/*control层是否空闲*/
     {
         __set_PRIMASK(saved_primask);
         return MOTION_SEQUENCE_BUSY;
@@ -90,7 +94,11 @@ MotionSequenceState_t MotionSequence_GetState(void)
 
 bool MotionSequence_IsBusy(void)
 {
-    return MotionSequence_GetState() == MOTION_SEQUENCE_RUNNING;
+    MotionSequenceState_t state;
+
+    state = MotionSequence_GetState();
+
+    return (state == MOTION_SEQUENCE_RUNNING) || (state == MOTION_SEQUENCE_PAUSED);
 }
 
 void MotionSequence_Update(void)			/*也是一直调用，逻辑上类似while(1)*/
@@ -103,7 +111,7 @@ void MotionSequence_Update(void)			/*也是一直调用，逻辑上类似while(1
     saved_primask = __get_PRIMASK();
     __disable_irq();
 
-    if (s_sequence.state != MOTION_SEQUENCE_RUNNING)/*这里的running也包含了pending的含义*/
+    if (s_sequence.state != MOTION_SEQUENCE_RUNNING)/*这里的running包含了pending的含义*/
     {
         __set_PRIMASK(saved_primask);
         return;
@@ -132,6 +140,15 @@ void MotionSequence_Update(void)			/*也是一直调用，逻辑上类似while(1
         return;
     }
 
+    /* 再处理暂停：保留 next_step，不提交下一段。 */
+	if (s_sequence.pause_requested)
+	{
+		s_sequence.pause_requested = false;
+		s_sequence.state = MOTION_SEQUENCE_PAUSED;
+
+		__set_PRIMASK(saved_primask);
+		return;
+	}
     /* 4. 本轮所有动作已经执行完 */
     if (snapshot.next_step >= snapshot.step_count)
     {
@@ -176,9 +193,18 @@ void MotionSequence_RequestStop(void)
     /*这里不要把 state 直接改成 IDLE，当前段可能还在执行，
      * 此时 MotionSequence_IsBusy() 仍应该返回 true；“收到了停止请求”和“已经停止”是两回事。*/
     if (s_sequence.state == MOTION_SEQUENCE_RUNNING)
-    {
-        s_sequence.stop_requested = true;
-    }
+        {
+            /* 运行中：等待当前段结束。 */
+            s_sequence.stop_requested = true;
+            s_sequence.pause_requested = false;
+        }
+        else if (s_sequence.state == MOTION_SEQUENCE_PAUSED)
+        {
+            /* 已经处于段末，没有正在执行的段，可直接结束。 */
+            s_sequence.stop_requested = false;
+            s_sequence.pause_requested = false;
+            s_sequence.state = MOTION_SEQUENCE_STOPPED;
+        }
 
     __set_PRIMASK(saved_primask);
 }
