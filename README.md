@@ -72,7 +72,6 @@ MicroDuck_F103_FreeRTOS/
     STM32 HAL, CMSIS, and FreeRTOS
 3D代打_原始Otto_V9/    mechanical reference files and printing notes
 media/               original hardware demo and a preview image
-项目现状.md           detailed project status and restart checklist
 答疑.md               concepts, explanations, and learning notes
 ```
 
@@ -90,10 +89,11 @@ There are two application tasks: heartbeat and servo control. The action and seq
 
 Most study notes are in Chinese:
 
-- [Project status and unfinished edits](项目现状.md): start with sections 0, 12, and 13.
 - [Questions and learning notes](答疑.md): sections 45–52 explain the latest state-machine discussions.
 
-The repository preserves earlier stages of learning. Older notes may describe code or parameters from an earlier stage; the dated project checkpoint and actual source take precedence.
+Detailed progress tracking and restart notes are maintained locally and are not included in this repository.
+
+The repository preserves earlier stages of learning. Older notes may describe code or parameters from an earlier stage; the current status in this README and the actual source take precedence.
 
 To inspect the project, import `MicroDuck_F103_FreeRTOS` into STM32CubeIDE using **Existing Projects into Workspace**. Before building or running, finish the documented pause/resume edits. The next planned work is a small action-state query, a FreeRTOS command queue, and a simple serial command interface. Finite action repetition, command-speed constraints, and persistent calibration remain later ideas.
 

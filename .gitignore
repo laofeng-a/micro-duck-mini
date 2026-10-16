@@ -10,3 +10,6 @@
 **/*.hex
 **/*.map
 **/*.launch
+
+# Local-only progress notes
+/项目现状.md
